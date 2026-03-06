@@ -386,7 +386,7 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                                 className="bg-slate-700 border border-slate-600 text-slate-200 rounded-xl px-4 py-2 text-sm font-medium cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none"
                             >
                                 <option value="" disabled>
-                                    📥 Importar de Planilha...
+                                    📥 Importar de Planilha de Controle...
                                 </option>
                                 {availableMonths.map((m) => (
                                     <option key={m} value={m}>{m}</option>
@@ -394,6 +394,75 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                             </select>
                         </div>
                     )}
+                    <label className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer text-center">
+                        📥 Importar CSV
+                        <input type="file" accept=".csv" className="hidden" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                                const text = evt.target?.result as string;
+                                const lines = text.split('\n');
+                                if (lines.length < 2) {
+                                    alert('O arquivo CSV parece vazio ou não tem o cabeçalho correto.');
+                                    return;
+                                }
+
+                                const newFuncs = [];
+                                const newCondosMap = new Map();
+                                let funcsImportadas = 0;
+
+                                for (let i = 1; i < lines.length; i++) {
+                                    const line = lines[i].trim();
+                                    if (!line) continue;
+                                    // Suporte para CSV padrão inglês (,) ou padrão brasileiro (;)
+                                    const cols = line.includes(';') ? line.split(';') : line.split(',');
+                                    if (cols.length >= 3) {
+                                        const condoNome = cols[0]?.trim() || '';
+                                        const funcNome = cols[1]?.trim() || '';
+                                        const salarioStr = cols[2]?.trim().replace('R$', '').replace('.', '').replace(',', '.') || '0';
+                                        const status = cols[3]?.trim() || 'registrada';
+                                        const admissao = cols[4]?.trim() || '';
+
+                                        if (funcNome && condoNome) {
+                                            newFuncs.push({
+                                                condominio: condoNome,
+                                                nome: funcNome,
+                                                salario: parseFloat(salarioStr) || 0,
+                                                statusClt: status,
+                                                dataAdmissao: admissao,
+                                                totalReceber: parseFloat(salarioStr) || 0
+                                            });
+                                            funcsImportadas++;
+
+                                            if (!newCondosMap.has(condoNome.toLowerCase())) {
+                                                newCondosMap.set(condoNome.toLowerCase(), {
+                                                    nome: condoNome,
+                                                    cnpj: '',
+                                                    valorContrato: 0,
+                                                    receitaBruta: 0,
+                                                    inssRetido: 0,
+                                                    receitaLiquida: 0
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+
+                                const existingCondos = new Set(localData.condominios.map(c => c.nome.toLowerCase()));
+                                const condosToAdd = Array.from(newCondosMap.values()).filter(c => !existingCondos.has(c.nome.toLowerCase()));
+
+                                setLocalData(prev => ({
+                                    ...prev,
+                                    funcionarios: [...newFuncs, ...prev.funcionarios],
+                                    condominios: [...condosToAdd, ...prev.condominios]
+                                }));
+                                alert(`Sucesso! Foram importadas ${funcsImportadas} funcionárias e ${condosToAdd.length} novos condomínios detectados.`);
+                                e.target.value = ''; // Reset input
+                            };
+                            reader.readAsText(file);
+                        }} />
+                    </label>
                     <button
                         onClick={handleSave}
                         className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-600/20"
@@ -436,67 +505,64 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
             <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
                 {activeSubTab === 'condos' ? (
                     <div className="p-6 space-y-4">
+                        <button
+                            onClick={addCondo}
+                            className="w-full py-4 flex items-center justify-center gap-2 text-indigo-400 hover:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 border border-dashed border-indigo-500/30 rounded-xl text-sm font-semibold transition-all group mb-2"
+                        >
+                            <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" /> Adicionar Novo Condomínio
+                        </button>
                         {filteredCondos.length === 0 ? (
                             <div className="text-center py-12 bg-slate-900/20 rounded-2xl border border-dashed border-slate-700">
                                 <p className="text-slate-500">Nenhum condomínio encontrado.</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-4">
-                                {localData.condominios.map((condo, originalIdx) => {
-                                    const isMatch = condo.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                        condo.cnpj.includes(searchTerm);
-                                    if (!isMatch) return null;
-
-                                    const condoEmployees = localData.funcionarios.filter(f => f.condominio === condo.nome);
-                                    return (
-                                        <CondoCard
-                                            key={originalIdx}
-                                            condo={condo}
-                                            employees={condoEmployees}
-                                            onUpdate={(field, val) => updateCondo(originalIdx, field, val)}
-                                            onRemove={() => removeCondo(originalIdx)}
-                                        />
-                                    );
-                                })}
+                                {localData.condominios
+                                    .map((condo, originalIdx) => ({ condo, originalIdx }))
+                                    .filter(({ condo }) => condo.nome.toLowerCase().includes(searchTerm.toLowerCase()) || condo.cnpj.includes(searchTerm))
+                                    .sort((a, b) => (b.condo.valorContrato || 0) - (a.condo.valorContrato || 0))
+                                    .map(({ condo, originalIdx }) => {
+                                        const condoEmployees = localData.funcionarios.filter(f => f.condominio === condo.nome);
+                                        return (
+                                            <CondoCard
+                                                key={originalIdx}
+                                                condo={condo}
+                                                employees={condoEmployees}
+                                                onUpdate={(field, val) => updateCondo(originalIdx, field, val)}
+                                                onRemove={() => removeCondo(originalIdx)}
+                                            />
+                                        );
+                                    })}
                             </div>
                         )}
-                        <button
-                            onClick={addCondo}
-                            className="w-full py-4 flex items-center justify-center gap-2 text-indigo-400 hover:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 border border-dashed border-indigo-500/30 rounded-xl text-sm font-semibold transition-all group"
-                        >
-                            <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" /> Adicionar Novo Condomínio
-                        </button>
                     </div>
                 ) : (
                     <div className="p-6 space-y-4">
+                        <button
+                            onClick={addFunc}
+                            className="w-full py-4 flex items-center justify-center gap-2 text-indigo-400 hover:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 border border-dashed border-indigo-500/30 rounded-xl text-sm font-semibold transition-all group mb-2"
+                        >
+                            <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" /> Adicionar Nova Funcionária
+                        </button>
                         {filteredFuncs.length === 0 ? (
                             <div className="text-center py-12 bg-slate-900/20 rounded-2xl border border-dashed border-slate-700">
                                 <p className="text-slate-500">Nenhuma funcionária encontrada.</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-4">
-                                {localData.funcionarios.map((func, originalIdx) => {
-                                    const isMatch = func.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                        func.condominio.toLowerCase().includes(searchTerm.toLowerCase());
-                                    if (!isMatch) return null;
-
-                                    return (
+                                {localData.funcionarios
+                                    .map((func, originalIdx) => ({ func, originalIdx }))
+                                    .filter(({ func }) => func.nome.toLowerCase().includes(searchTerm.toLowerCase()) || func.condominio.toLowerCase().includes(searchTerm.toLowerCase()))
+                                    .map(({ func, originalIdx }) => (
                                         <EmployeeCard
                                             key={originalIdx}
                                             employee={func}
                                             onUpdate={(field, val) => updateFunc(originalIdx, field, val)}
                                             onRemove={() => removeFunc(originalIdx)}
                                         />
-                                    );
-                                })}
+                                    ))}
                             </div>
                         )}
-                        <button
-                            onClick={addFunc}
-                            className="w-full py-4 flex items-center justify-center gap-2 text-indigo-400 hover:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 border border-dashed border-indigo-500/30 rounded-xl text-sm font-semibold transition-all group"
-                        >
-                            <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" /> Adicionar Nova Funcionária
-                        </button>
                     </div>
                 )}
             </div>
