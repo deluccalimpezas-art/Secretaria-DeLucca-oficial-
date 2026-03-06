@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Building2, Users, Save, Plus, Trash2, Search, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import type { MasterRHData, CondominioData, FuncionarioData } from '../modelsFinance';
 
@@ -396,7 +396,7 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                     )}
                     <label className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer text-center">
                         📥 Importar CSV
-                        <input type="file" accept=".csv" className="hidden" onChange={(e) => {
+                        <input type="file" accept=".csv" className="hidden" onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
                             const reader = new FileReader();
@@ -408,8 +408,8 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                                     return;
                                 }
 
-                                const newFuncs = [];
-                                const newCondosMap = new Map();
+                                const newFuncs: FuncionarioData[] = [];
+                                const newCondosMap = new Map<string, CondominioData>();
                                 let funcsImportadas = 0;
 
                                 for (let i = 1; i < lines.length; i++) {
@@ -421,7 +421,7 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                                         const condoNome = cols[0]?.trim() || '';
                                         const funcNome = cols[1]?.trim() || '';
                                         const salarioStr = cols[2]?.trim().replace('R$', '').replace('.', '').replace(',', '.') || '0';
-                                        const status = cols[3]?.trim() || 'registrada';
+                                        const status = (cols[3]?.trim() as FuncionarioData['statusClt']) || 'registrada';
                                         const admissao = cols[4]?.trim() || '';
 
                                         if (funcNome && condoNome) {
@@ -449,10 +449,10 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                                     }
                                 }
 
-                                const existingCondos = new Set(localData.condominios.map(c => c.nome.toLowerCase()));
-                                const condosToAdd = Array.from(newCondosMap.values()).filter(c => !existingCondos.has(c.nome.toLowerCase()));
+                                const existingCondos = new Set(localData.condominios.map((c: CondominioData) => c.nome.toLowerCase()));
+                                const condosToAdd = Array.from(newCondosMap.values()).filter((c: CondominioData) => !existingCondos.has(c.nome.toLowerCase()));
 
-                                setLocalData(prev => ({
+                                setLocalData((prev: MasterRHData) => ({
                                     ...prev,
                                     funcionarios: [...newFuncs, ...prev.funcionarios],
                                     condominios: [...condosToAdd, ...prev.condominios]
@@ -518,11 +518,11 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                         ) : (
                             <div className="grid grid-cols-1 gap-4">
                                 {localData.condominios
-                                    .map((condo, originalIdx) => ({ condo, originalIdx }))
-                                    .filter(({ condo }) => condo.nome.toLowerCase().includes(searchTerm.toLowerCase()) || condo.cnpj.includes(searchTerm))
-                                    .sort((a, b) => (b.condo.valorContrato || 0) - (a.condo.valorContrato || 0))
-                                    .map(({ condo, originalIdx }) => {
-                                        const condoEmployees = localData.funcionarios.filter(f => f.condominio === condo.nome);
+                                    .map((condo: CondominioData, originalIdx: number) => ({ condo, originalIdx }))
+                                    .filter(({ condo }: { condo: CondominioData }) => condo.nome.toLowerCase().includes(searchTerm.toLowerCase()) || condo.cnpj.includes(searchTerm))
+                                    .sort((a: { condo: CondominioData }, b: { condo: CondominioData }) => (b.condo.valorContrato || 0) - (a.condo.valorContrato || 0))
+                                    .map(({ condo, originalIdx }: { condo: CondominioData, originalIdx: number }) => {
+                                        const condoEmployees = localData.funcionarios.filter((f: FuncionarioData) => f.condominio === condo.nome);
                                         return (
                                             <CondoCard
                                                 key={originalIdx}
@@ -551,9 +551,9 @@ export function RHManagerView({ data, onSave, onImportFromMonth, availableMonths
                         ) : (
                             <div className="grid grid-cols-1 gap-4">
                                 {localData.funcionarios
-                                    .map((func, originalIdx) => ({ func, originalIdx }))
-                                    .filter(({ func }) => func.nome.toLowerCase().includes(searchTerm.toLowerCase()) || func.condominio.toLowerCase().includes(searchTerm.toLowerCase()))
-                                    .map(({ func, originalIdx }) => (
+                                    .map((func: FuncionarioData, originalIdx: number) => ({ func, originalIdx }))
+                                    .filter(({ func }: { func: FuncionarioData }) => func.nome.toLowerCase().includes(searchTerm.toLowerCase()) || func.condominio.toLowerCase().includes(searchTerm.toLowerCase()))
+                                    .map(({ func, originalIdx }: { func: FuncionarioData, originalIdx: number }) => (
                                         <EmployeeCard
                                             key={originalIdx}
                                             employee={func}
